@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+
+# Project Data & Outputs
+/data/
+experiments/outputs/
+saved_models/
+logs/
+*.log
+*.pth
+*.pkl
+*.h5
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store

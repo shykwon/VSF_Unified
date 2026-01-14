@@ -1,0 +1,65 @@
+
+## 📦 VSF 관련 논문 GitHub 코드 정리
+
+### ✅ 공식 코드 확인된 논문
+
+| 논문 | 모델명 | GitHub |
+|------|--------|--------|
+| **KDD2022** | FDW | https://github.com/google/vsf-time-series |
+| **KDD2024** | GinAR | https://github.com/GestaltCogTeam/GinAR |
+| **ICML2020** | SeFT | https://github.com/BorgwardtLab/Set_Functions_for_Time_Series |
+| **KDD2025** | GIMCC | https://zenodo.org/records/15504834 |
+| **ICLR2025** | SRDI | https://anonymous.4open.science/r/SRDI-944C/SRDI/ |
+
+### ⏳ 코드 미공개 또는 미확인
+
+| 논문 | 모델명 | 상태 |
+|------|--------|------|
+| **IEEE TKDE** | TOI-VSF | 코드 미공개 (2024.11 arXiv 게재) |
+| **IJCAI2024** | TRF | 코드 미공개 |
+| **ICASSP2025** | - | 코드 미공개 |
+
+---
+
+### 🔧 주요 베이스라인 모델 GitHub
+
+| 모델명 | 용도 | GitHub |
+|--------|------|--------|
+| **CSDI** | Diffusion 기반 Imputation | https://github.com/ermongroup/CSDI |
+| **SAITS** | Self-Attention 기반 Imputation | https://github.com/WenjieDu/SAITS |
+| **PyPOTS** | Time Series Imputation 통합 툴킷 | https://github.com/WenjieDu/PyPOTS |
+| **Awesome_Imputation** | Imputation 논문/코드 모음 | https://github.com/WenjieDu/Awesome_Imputation |
+
+---
+
+### 📚 유용한 Paper List 레포지토리
+
+| 레포지토리 | 설명 |
+|-----------|------|
+| https://github.com/xiyuanzh/time-series-papers | AI 학회 시계열 논문 목록 |
+| https://github.com/ddz16/TSFpaper | 시계열 예측 논문 모음 (모델별 분류) |
+| https://github.com/lixus7/Time-Series-Works-Conferences | 학회별 시계열 논문 정리 |
+| https://github.com/qingsongedu/Awesome-SSL4TS | Self-Supervised Learning for Time Series |
+
+--- 
+
+### 💡 실험 환경 구축 팁
+
+**1순위로 재현해볼 코드:**
+```bash
+# 1. FDW (VSF 최초 논문, Google 공식)
+git clone https://github.com/google/vsf-time-series
+
+# 2. GinAR (KDD2024, 잘 정리된 코드)
+git clone https://github.com/GestaltCogTeam/GinAR
+
+# 3. 베이스라인 Imputation 모델들
+git clone https://github.com/ermongroup/CSDI
+git clone https://github.com/WenjieDu/SAITS
+```
+
+**데이터셋 (GinAR 레포에서 제공):**
+```
+https://github.com/ChengqingYu/MTS_dataset
+```
+- METR-LA, PEMS-BAY, PEMS04, PEMS08, Solar 등 포함

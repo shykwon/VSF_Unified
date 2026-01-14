@@ -1,0 +1,19 @@
+Starting verification...
+Testing FDW... Success! Output shape: torch.Size([2, 12, 10, 1])
+Testing GinAR... Success! Output shape: torch.Size([2, 12, 10, 1])
+Testing SRDI... invariant---- torch.Size([128, 24, 10])
+variant---- torch.Size([128, 24, 10])
+invariant---- torch.Size([128, 24, 10])
+variant---- torch.Size([128, 24, 10])
+invariant---- torch.Size([128, 24, 10])
+variant---- torch.Size([128, 24, 10])
+invariant---- torch.Size([128, 24, 10])
+variant---- torch.Size([128, 24, 10])
+C:\Users\samsung\project\research_VSF\src\models\srdi\../../../external/SRDI\main_model.py:204: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.detach().clone() or sourceTensor.detach().clone().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  x = torch.tensor(x, requires_grad=True)
+C:\Users\samsung\project\research_VSF\src\models\srdi\../../../external/SRDI\main_model.py:205: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.detach().clone() or sourceTensor.detach().clone().requires_grad_(True), rather than torch.tensor(sourceTensor).
+  loss_d = torch.tensor(loss_d, requires_grad=True).to(self.device)
+Success! Loss: 228.35986328125
+Testing CSDI... Success! Loss: 0.0
+Testing SAITS... Success! Output shape: torch.Size([2, 12, 10, 1])
+GIMCC test usually requires valid adjacency matrix, skipping for generic test if not robust.
