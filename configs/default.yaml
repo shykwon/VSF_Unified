@@ -1,0 +1,40 @@
+# VSF Research Platform - Default Configuration
+# Usage: python scripts/train.py --config configs/default.yaml
+
+# Model and Dataset
+model: fdw                    # fdw, ginar, csdi, srdi, saits
+dataset: metr-la              # metr-la, pems-bay, solar, traffic, electricity
+data_dir: data/raw
+
+# Sequence Settings
+seq_in: 12                    # Input sequence length
+seq_out: 12                   # Prediction horizon
+
+# Training Hyperparameters
+epochs: 100
+batch_size: 32
+lr: 0.001
+weight_decay: 0.0001
+dropout: 0.1
+hidden_dim: 32
+
+# Loss Function
+loss: masked_mae              # mse, masked_mae
+
+# Early Stopping
+patience: 15
+
+# Data Splits
+train_ratio: 0.7
+val_ratio: 0.1
+
+# Reproducibility
+seed: 42
+# seeds: "42,123,456"         # Uncomment for multi-seed experiments
+
+# Device
+device: auto                  # auto, cuda, cpu
+
+# Logging
+log_dir: logs
+tensorboard: true

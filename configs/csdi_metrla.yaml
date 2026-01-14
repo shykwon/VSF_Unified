@@ -1,0 +1,26 @@
+# CSDI on METR-LA Configuration
+model: csdi
+dataset: metr-la
+data_dir: data/raw
+
+seq_in: 12
+seq_out: 12
+
+epochs: 100
+batch_size: 16                # Smaller batch for diffusion models
+lr: 0.001
+weight_decay: 0.0001
+dropout: 0.1
+hidden_dim: 64
+
+loss: masked_mae
+patience: 20
+
+train_ratio: 0.7
+val_ratio: 0.1
+
+seed: 42
+device: auto
+
+log_dir: logs
+tensorboard: true
