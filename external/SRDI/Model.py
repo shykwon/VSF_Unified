@@ -100,8 +100,15 @@ def integrate_patterns(x_invariant, x_variant, mlp_model):
     return x_final
 
 def compute(input_dim, output_dim, input_data):
+    """
+    Compute temporal consistency loss for invariant patterns.
+
+    MODIFIED for memory efficiency (GTX 1080 Ti 11GB):
+    - Original: stored full (batch*seq, dim, dim) correlation_matrix (~10GB for 207 nodes)
+    - Modified: only stores previous (dim, dim) matrix, computes diff on-the-fly
+    - TODO: Revert to original when running on larger GPU (32GB+)
+    """
     device = input_data.device
-    # input_data = input_data.to('cuda:2') # Removed
     layer = nn.Linear(input_dim, output_dim).to(device)
     output_data = layer(input_data)
 
@@ -109,22 +116,23 @@ def compute(input_dim, output_dim, input_data):
 
     x = flattened_tensor.shape[0]
     y = output_dim
-    correlation_matrix = torch.zeros(x, y, y).to(device)
 
-    # 计算关系矩阵
-    
+    # Memory-efficient version: only keep previous correlation for diff calculation
+    # Instead of: correlation_matrix = torch.zeros(x, y, y).to(device)  # OOM!
+    loss = torch.zeros(y, y).to(device)
+    prev_corr = None
+
     for i in range(x):
-        correlation_matrix[i] = torch.nn.functional.cosine_similarity(flattened_tensor[i].unsqueeze(1),
-                                                                      flattened_tensor[i].unsqueeze(0)).to(device)
-    # 打印关系矩阵的形状
-    # 两两时刻相减
-    #若训练时候速度较慢，GPU利用率较低可换为被注释的语句执行
-    loss = torch.zeros(y,y).to(device)
-    #diff_matrix = torch.abs(correlation_matrix[1:] - correlation_matrix[:-1]).to('cuda:2')
-    for i in range(len(correlation_matrix)):
-        if i == 0:
-            i = i + 1
-        else:
-            loss += torch.abs(correlation_matrix[i] - correlation_matrix[i - 1])
-    #loss = diff_matrix.sum()
+        # Compute current correlation matrix (y, y)
+        curr_corr = torch.nn.functional.cosine_similarity(
+            flattened_tensor[i].unsqueeze(1),
+            flattened_tensor[i].unsqueeze(0)
+        )
+
+        # Accumulate loss from difference with previous timestep
+        if prev_corr is not None:
+            loss += torch.abs(curr_corr - prev_corr)
+
+        prev_corr = curr_corr
+
     return loss

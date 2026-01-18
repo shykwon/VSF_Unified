@@ -65,13 +65,14 @@ class CSDIWrapper(BaseVSFModel):
         # We assume self.config is correct or we construct a dummy one
         if 'model' not in self.config:
             # Construct default config for CSDI (based on base_forecasting.yaml)
+            # NOTE: num_sample_features must be >= target_dim to avoid feature_id bug in evaluate()
             self.csdi_config = {
                 "model": {
                     "timeemb": 128,
                     "featureemb": 16,
                     "is_unconditional": False,
                     "target_strategy": "random",
-                    "num_sample_features": min(target_dim, 64),  # Required for CSDI_Forecasting
+                    "num_sample_features": target_dim,  # Must equal target_dim to avoid evaluate() bug
                 },
                 "diffusion": {
                     "layers": 4,

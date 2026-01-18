@@ -35,19 +35,20 @@ import threading
 
 # GPU 할당 전략: {gpu_id: [models]}
 # 가벼운 모델은 같은 GPU에, 무거운 모델은 단독 GPU
+# NOTE: 2 GPU 환경으로 재배치 (GPU 2 사용 불가)
 GPU_ASSIGNMENT = {
-    0: ['fdw', 'ginar'],      # 가벼운 모델들 (순차 실행)
-    1: ['csdi'],              # Diffusion 모델 (단독)
-    2: ['srdi', 'saits'],     # Diffusion + Attention (순차 실행)
+    0: ['fdw', 'ginar', 'saits', 'gimcc'],  # 가벼운/중간 모델들 (순차 실행)
+    1: ['csdi', 'srdi'],                     # Diffusion 모델들 (순차 실행)
 }
 
-# 모델별 권장 batch_size (GTX 1080 8GB 기준)
+# 모델별 권장 batch_size (GTX 1080 11GB 기준)
 MODEL_BATCH_SIZES = {
     'fdw': 32,
     'ginar': 32,
     'csdi': 8,      # Diffusion: VRAM 많이 사용
-    'srdi': 8,      # Diffusion: VRAM 많이 사용
+    'srdi': 4,      # Diffusion+Dispatcher: OOM 방지를 위해 축소
     'saits': 16,    # Attention: 중간
+    'gimcc': 16,    # Graph+Causal: 중간
 }
 
 # 기본 설정
@@ -65,6 +66,7 @@ def run_experiment(gpu_id, model, dataset, seeds, epochs, log_dir, dry_run=False
     batch_size = MODEL_BATCH_SIZES.get(model, 32)
     seeds_str = ','.join(map(str, seeds))
 
+    # NOTE: CUDA_VISIBLE_DEVICES 설정 시 해당 GPU가 cuda:0으로 매핑됨
     cmd = [
         sys.executable, 'scripts/train.py',
         '--model', model,
@@ -73,7 +75,7 @@ def run_experiment(gpu_id, model, dataset, seeds, epochs, log_dir, dry_run=False
         '--epochs', str(epochs),
         '--batch_size', str(batch_size),
         '--log_dir', log_dir,
-        '--device', f'cuda:{gpu_id}',
+        '--device', 'cuda:0',  # CUDA_VISIBLE_DEVICES로 GPU 선택하므로 항상 cuda:0
         '--tensorboard'
     ]
 
@@ -181,12 +183,14 @@ def parse_args():
                         help='Number of epochs')
     parser.add_argument('--log_dir', type=str, default='logs/parallel',
                         help='Log directory')
-    parser.add_argument('--gpus', type=str, default='0,1,2',
+    parser.add_argument('--gpus', type=str, default='0,1',
                         help='GPUs to use (comma-separated)')
     parser.add_argument('--dry-run', action='store_true',
                         help='Print commands without executing')
     parser.add_argument('--sequential', action='store_true',
                         help='Run all experiments sequentially (single GPU)')
+    parser.add_argument('-y', '--yes', action='store_true',
+                        help='Skip confirmation prompt')
 
     return parser.parse_args()
 
@@ -251,7 +255,7 @@ def main():
         return
 
     # Confirm before running
-    if not args.dry_run:
+    if not args.dry_run and not args.yes:
         response = input("\nProceed with experiments? [y/N]: ")
         if response.lower() != 'y':
             print("Cancelled.")

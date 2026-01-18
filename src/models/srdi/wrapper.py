@@ -61,18 +61,19 @@ class SRDIWrapper(BaseVSFModel):
         # SRDI (CSDI_vsf) requires nested config structure like CSDI
         if 'model' not in self.config:
             # Construct default config for SRDI
+            # NOTE: Reduced layers/channels for GTX 1080 Ti (11GB) compatibility
             self.srdi_config = {
                 "model": {
-                    "timeemb": 128,
-                    "featureemb": 16,
+                    "timeemb": 64,       # Reduced from 128
+                    "featureemb": 8,     # Reduced from 16
                     "is_unconditional": False,
                     "target_strategy": "random",
                 },
                 "diffusion": {
-                    "layers": 4,
-                    "channels": 64,
-                    "nheads": 8,
-                    "diffusion_embedding_dim": 128,
+                    "layers": 2,         # Reduced from 4 (major memory savings)
+                    "channels": 32,      # Reduced from 64
+                    "nheads": 4,         # Reduced from 8
+                    "diffusion_embedding_dim": 64,  # Reduced from 128
                     "beta_start": 0.0001,
                     "beta_end": 0.5,
                     "num_steps": 50,

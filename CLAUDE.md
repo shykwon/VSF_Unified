@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Variable Subset Forecasting (VSF) 연구 플랫폼. 다양한 시계열 예측 모델(FDW, GinAR, GIMCC, SRDI, CSDI, SAITS)을 통합 인터페이스로 실험할 수 있는 환경.
 
-**목표**: 5개 모델을 동일한 조건에서 공정하게 비교 실험
+**목표**: 6개 모델을 동일한 조건에서 공정하게 비교 실험
 
 ## Quick Start (신규 서버)
 
@@ -65,6 +65,7 @@ research_VSF/
 │   ├── models/                  # 모델 래퍼들
 │   │   ├── fdw/wrapper.py
 │   │   ├── ginar/wrapper.py
+│   │   ├── gimcc/wrapper.py
 │   │   ├── csdi/wrapper.py
 │   │   ├── srdi/wrapper.py
 │   │   └── saits/wrapper.py
@@ -110,7 +111,7 @@ Output → {'pred': (B, T_out, N, C), 'loss': optional}
 
 | 모델 | Loss 계산 위치 | Trainer 동작 |
 |------|---------------|--------------|
-| CSDI, SRDI, SAITS | 내부 (forward에서 반환) | `output['loss']` 사용 |
+| CSDI, SRDI, SAITS, GIMCC | 내부 (forward에서 반환) | `output['loss']` 사용 |
 | FDW, GinAR | 외부 (Trainer에서 계산) | `masked_mae(pred, true)` |
 
 ## Models
@@ -122,7 +123,7 @@ Output → {'pred': (B, T_out, N, C), 'loss': optional}
 | CSDI | Diffusion | - | ~6-8GB |
 | SRDI | Diffusion | ICLR 2025 | ~6-8GB |
 | SAITS | Attention | - | ~3-4GB |
-| GIMCC | Graph | KDD 2025 | (미구현) |
+| GIMCC | Graph+Causal | KDD 2025 | ~4-6GB |
 
 ## Key Config Parameters
 
@@ -161,7 +162,7 @@ logs/
 ## Current Status
 
 ### ✅ 완료
-- 5개 모델 래퍼 구현 (FDW, GinAR, CSDI, SRDI, SAITS)
+- 6개 모델 래퍼 구현 (FDW, GinAR, GIMCC, CSDI, SRDI, SAITS)
 - 통합 Trainer (UnifiedTrainer)
 - 통합 데이터 파이프라인
 - Seed 관리 (재현성)
@@ -169,7 +170,6 @@ logs/
 - TensorBoard 로깅
 
 ### ⚠️ 미완료
-- GIMCC 래퍼 (placeholder)
 - VSF 시나리오별 마스킹 전략
 
 ## Important Notes
@@ -181,6 +181,100 @@ logs/
 3. **Diffusion Models**: CSDI/SRDI는 batch_size를 8로 낮춰야 8GB GPU에서 동작
 
 4. **External Code**: `external/` 디렉토리는 원본 코드이므로 수정 금지, wrapper로만 사용
+
+---
+
+## ⚠️ Temporary Modifications (GTX 1080 Ti 11GB 환경)
+
+아래 수정사항은 **GTX 1080 Ti (11GB)** 환경에서 OOM/호환성 문제 해결을 위해 적용됨.
+**32GB+ GPU** 또는 **더 나은 환경**에서는 원복을 권장.
+
+### 1. SRDI Wrapper Config (src/models/srdi/wrapper.py:63-82)
+
+**문제**: SRDI Diffusion 모델이 기본 설정으로 OOM 발생
+**수정**: config 축소 (성능 저하 가능성 있음)
+
+```python
+# 원본 (고성능 GPU용)
+"model": {
+    "timeemb": 128,
+    "featureemb": 16,
+},
+"diffusion": {
+    "layers": 4,
+    "channels": 64,
+    "nheads": 8,
+    "diffusion_embedding_dim": 128,
+}
+
+# 현재 (11GB GPU용)
+"model": {
+    "timeemb": 64,       # Reduced
+    "featureemb": 8,     # Reduced
+},
+"diffusion": {
+    "layers": 2,         # Reduced from 4
+    "channels": 32,      # Reduced from 64
+    "nheads": 4,         # Reduced from 8
+    "diffusion_embedding_dim": 64,  # Reduced
+}
+```
+
+**원복 조건**: 32GB+ VRAM GPU 사용 시
+
+---
+
+### 2. SRDI compute() Function (external/SRDI/Model.py:102-138)
+
+**문제**: `correlation_matrix = torch.zeros(x, y, y)` 가 (batch×seq, 207, 207) 크기로 ~10GB 메모리 사용
+**수정**: 전체 matrix 저장 대신 이전 timestep만 유지하여 on-the-fly 계산
+
+```python
+# 원본 (메모리 비효율)
+correlation_matrix = torch.zeros(x, y, y).to(device)
+for i in range(x):
+    correlation_matrix[i] = cosine_similarity(...)
+for i in range(len(correlation_matrix)):
+    loss += torch.abs(correlation_matrix[i] - correlation_matrix[i-1])
+
+# 현재 (메모리 효율)
+prev_corr = None
+for i in range(x):
+    curr_corr = cosine_similarity(...)
+    if prev_corr is not None:
+        loss += torch.abs(curr_corr - prev_corr)
+    prev_corr = curr_corr
+```
+
+**원복 조건**: 32GB+ VRAM GPU 사용 시 (원본이 약간 더 빠를 수 있음)
+
+---
+
+### 3. GIMCC edge_weight (external/gimcc/models/graph/graph_utils.py:6-31)
+
+**문제**: PyTorch Geometric 2.3+ 에서 SAGEConv가 `edge_weight` 필수로 요구
+**수정**: `create_pyg_data()`에 `edge_weight=torch.ones(num_edges)` 추가
+
+```python
+# 원본
+data = Data(x=node_features, edge_index=edge_index)
+
+# 현재
+edge_weight = torch.ones(num_edges, dtype=torch.float)
+data = Data(x=node_features, edge_index=edge_index, edge_weight=edge_weight)
+```
+
+**원복 조건**: PyTorch Geometric < 2.3 사용 시 (선택적, 현재 코드도 호환됨)
+
+---
+
+### 원복 체크리스트
+
+| 파일 | 수정 내용 | 원복 시점 |
+|------|----------|----------|
+| `src/models/srdi/wrapper.py` | diffusion config 축소 | 32GB+ GPU |
+| `external/SRDI/Model.py` | compute() 메모리 최적화 | 32GB+ GPU (선택적) |
+| `external/gimcc/.../graph_utils.py` | edge_weight 추가 | PyG < 2.3 (선택적) |
 
 ## Useful Commands
 
