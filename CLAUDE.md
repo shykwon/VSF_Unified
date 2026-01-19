@@ -250,18 +250,20 @@ for i in range(x):
 
 ---
 
-### 3. GIMCC edge_weight (external/gimcc/models/graph/graph_utils.py:6-31)
+### 3. GIMCC edge_weight (external/gimcc/models/graph/)
 
 **문제**: PyTorch Geometric 2.3+ 에서 SAGEConv가 `edge_weight` 필수로 요구
-**수정**: `create_pyg_data()`에 `edge_weight=torch.ones(num_edges)` 추가
+**수정 1**: `graph_utils.py` - `create_pyg_data()`에 `edge_weight=torch.ones(num_edges)` 추가
+**수정 2**: `subgraph_matching.py` - `SkipLastGNN.forward()`에서 edge_weight 추출 및 전달
 
 ```python
-# 원본
-data = Data(x=node_features, edge_index=edge_index)
-
-# 현재
+# graph_utils.py 수정
 edge_weight = torch.ones(num_edges, dtype=torch.float)
 data = Data(x=node_features, edge_index=edge_index, edge_weight=edge_weight)
+
+# subgraph_matching.py 수정 (line 143-173)
+edge_weight = getattr(data, 'edge_weight', None)  # 추가
+x = self.convs[i](curr_emb, edge_index, edge_weight)  # edge_weight 전달
 ```
 
 **원복 조건**: PyTorch Geometric < 2.3 사용 시 (선택적, 현재 코드도 호환됨)
@@ -275,6 +277,7 @@ data = Data(x=node_features, edge_index=edge_index, edge_weight=edge_weight)
 | `src/models/srdi/wrapper.py` | diffusion config 축소 | 32GB+ GPU |
 | `external/SRDI/Model.py` | compute() 메모리 최적화 | 32GB+ GPU (선택적) |
 | `external/gimcc/.../graph_utils.py` | edge_weight 추가 | PyG < 2.3 (선택적) |
+| `external/gimcc/.../subgraph_matching.py` | edge_weight 전달 | PyG < 2.3 (선택적) |
 
 ## Useful Commands
 
