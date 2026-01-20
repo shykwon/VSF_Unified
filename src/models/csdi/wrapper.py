@@ -118,14 +118,17 @@ class CSDIWrapper(BaseVSFModel):
         # 2. Concatenate (History + Future)
         # CSDI expects (B, T, N) and permutes appropriately
         full_x = torch.cat([x, future_data], dim=1) # (B, T_total, N)
-        
-        # 3. Create Masks
+
+        # 3. Create Masks (CRITICAL for CSDI forecasting)
+        # observed_mask: 1 for all data points (history + future have values)
+        # gt_mask: 1 for history, 0 for future (marks prediction target)
+        # This follows CSDI's original forecasting dataset setup
+        full_observed_mask = torch.ones_like(full_x)  # All data is "observed"
+
+        # gt_mask: history=1, future=0 (future is the prediction target)
         mask_hist = torch.ones_like(x)
         mask_future = torch.zeros_like(future_data)
-        full_observed_mask = torch.cat([mask_hist, mask_future], dim=1) # (B, T_total, N)
-        
-        # gt_mask: We want to mask everything as 1 generally for GT validity
-        full_gt_mask = torch.ones_like(full_x)
+        full_gt_mask = torch.cat([mask_hist, mask_future], dim=1)
         
         # 4. Timepoints
         T_total = full_x.shape[1]
