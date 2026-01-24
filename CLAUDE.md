@@ -121,9 +121,23 @@ Output → {'pred': (B, T_out, N, C), 'loss': optional}
 | FDW | Forecasting | KDD 2022 | ~2-3GB |
 | GinAR | Forecasting | KDD 2024 | ~2-3GB |
 | CSDI | Diffusion | - | ~6-8GB |
-| SRDI | Diffusion | ICLR 2025 | ~6-8GB |
+| SRDI | Diffusion+MAML | ICLR 2025 | ~8-12GB |
 | SAITS | Attention | - | ~3-4GB |
 | GIMCC | Graph+Causal | KDD 2025 | ~4-6GB |
+
+### SRDI Architecture (Full Implementation)
+
+SRDI는 3개의 컴포넌트로 구성됨:
+1. **CSDI_vsf**: Diffusion 기반 imputation 모듈
+2. **gtnet**: MTGNN 기반 forecaster
+3. **MAML**: Test-time adaptation을 위한 meta-learning
+
+```
+Training:  Input -> MAML(CSDI_vsf) -> Imputed -> gtnet -> Forecast
+Test:      각 샘플마다 MAML adaptation 수행 후 예측
+```
+
+**의존성**: `learn2learn>=0.2.0` (MAML 구현)
 
 ## Key Config Parameters
 
@@ -184,43 +198,63 @@ logs/
 
 ---
 
-## ⚠️ Temporary Modifications (GTX 1080 Ti 11GB 환경)
+## GPU Profile System
 
-아래 수정사항은 **GTX 1080 Ti (11GB)** 환경에서 OOM/호환성 문제 해결을 위해 적용됨.
-**32GB+ GPU** 또는 **더 나은 환경**에서는 원복을 권장.
+모델 설정은 GPU 메모리에 따라 자동 조정됩니다:
 
-### 1. SRDI Wrapper Config (src/models/srdi/wrapper.py:63-82)
+```bash
+# RTX 4090 (24GB) - 논문 기본 설정 (기본값)
+python scripts/train.py --model fdw --gpu_profile 4090
 
-**문제**: SRDI Diffusion 모델이 기본 설정으로 OOM 발생
-**수정**: config 축소 (성능 저하 가능성 있음)
+# GTX 1080 Ti (11GB) - 축소 설정
+python scripts/train.py --model fdw --gpu_profile 1080ti
+
+# A100 (40GB+) - 논문 기본 설정
+python scripts/train.py --model fdw --gpu_profile a100
+```
+
+| GPU Profile | hidden_dim | conv_channels | layers | batch_size |
+|-------------|------------|---------------|--------|------------|
+| 1080ti | 32 | 32 | 3 | 8-32 |
+| 4090 | 64 | 64 | 5 | 16-64 |
+| a100 | 64 | 64 | 5 | 32-128 |
+
+새 서버로 이전 시: `./scripts/migrate_to_4090.sh` 실행
+
+---
+
+## ⚠️ Legacy: GTX 1080 Ti (11GB) 수정사항
+
+아래는 `--gpu_profile 1080ti` 사용 시 자동 적용되는 설정입니다.
+
+### 1. SRDI Full Implementation (Level 3)
+
+SRDI는 이제 원본 구조를 완전히 재현:
+- **CSDI_vsf**: Diffusion 기반 imputation
+- **gtnet**: MTGNN 기반 forecaster
+- **MAML**: Test-time adaptation (learn2learn 필요)
+
+GPU Profile에 따라 diffusion config 자동 조정:
 
 ```python
-# 원본 (고성능 GPU용)
-"model": {
-    "timeemb": 128,
-    "featureemb": 16,
-},
+# 4090/A100 (24GB+) - 논문 기본 설정
 "diffusion": {
     "layers": 4,
     "channels": 64,
     "nheads": 8,
-    "diffusion_embedding_dim": 128,
+    "diffusion_embedding_dim": 32,  # base_forecasting.yaml
 }
 
-# 현재 (11GB GPU용)
-"model": {
-    "timeemb": 64,       # Reduced
-    "featureemb": 8,     # Reduced
-},
+# 1080ti (11GB) - 축소 설정
 "diffusion": {
-    "layers": 2,         # Reduced from 4
-    "channels": 32,      # Reduced from 64
-    "nheads": 4,         # Reduced from 8
-    "diffusion_embedding_dim": 64,  # Reduced
+    "layers": 2,
+    "channels": 32,
+    "nheads": 4,
+    "diffusion_embedding_dim": 32,
 }
 ```
 
-**원복 조건**: 32GB+ VRAM GPU 사용 시
+**의존성**: `pip install learn2learn` (없으면 MAML 없이 동작)
 
 ---
 

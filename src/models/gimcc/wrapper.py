@@ -92,7 +92,26 @@ class GIMCCWrapper(BaseVSFModel):
         # Forecaster (MTGNN / gtnet)
         # Handle predefined_A if passed (usually None for pure learning)
         predefined_A = config.get('adj_mx', None)
-        
+
+        # Convert numpy array to torch tensor (following original GIMCC main.py:226)
+        # Original: predefined_A = torch.tensor(predefined_A) - torch.eye(N)
+        if predefined_A is not None:
+            import numpy as np
+            if isinstance(predefined_A, np.ndarray):
+                adj = predefined_A.astype(np.float32)
+                # Remove self-loops (original GIMCC behavior)
+                adj = adj - np.eye(adj.shape[0], dtype=np.float32)
+                # Clip negative values to 0
+                adj = np.clip(adj, 0, None)
+                predefined_A = torch.from_numpy(adj).to(self.device)
+            elif isinstance(predefined_A, torch.Tensor):
+                # Remove self-loops
+                predefined_A = predefined_A.float() - torch.eye(predefined_A.shape[0])
+                predefined_A = torch.clamp(predefined_A, min=0).to(self.device)
+            print(f"GIMCC: Using predefined adjacency matrix, shape={predefined_A.shape}")
+        else:
+            print(f"GIMCC: No adjacency matrix provided, using learned graph")
+
         self.forecaster = gtnet(
             gcn_true=self.args.gcn_true, 
             buildA_true=self.args.buildA_true, 

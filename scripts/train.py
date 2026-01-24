@@ -215,9 +215,21 @@ def load_adj_matrix(dataset_name, data_dir):
     if dataset_name not in adj_files:
         return None
 
-    adj_path = Path(data_dir) / 'sensor_graph' / adj_files[dataset_name]
-    if not adj_path.exists():
-        print(f"Warning: Adjacency file not found: {adj_path}")
+    # Try multiple possible paths for adjacency matrix
+    possible_paths = [
+        Path(data_dir) / 'sensor_graph' / adj_files[dataset_name],
+        Path(data_dir).parent / 'sensor_graph' / adj_files[dataset_name],  # data/sensor_graph
+        Path('data') / 'sensor_graph' / adj_files[dataset_name],  # Absolute fallback
+    ]
+
+    adj_path = None
+    for p in possible_paths:
+        if p.exists():
+            adj_path = p
+            break
+
+    if adj_path is None:
+        print(f"Warning: Adjacency file not found. Tried: {possible_paths}")
         return None
 
     try:
@@ -322,23 +334,40 @@ def train_single_experiment(args, seed):
 
     # Create model config
     device = get_device(args.device)
+    # Set hidden_dim based on GPU profile if not explicitly set
+    gpu_profile = getattr(args, 'gpu_profile', '4090')
+    if gpu_profile == '1080ti':
+        default_hidden = 32
+    else:
+        default_hidden = 64  # Full paper settings for 4090/A100
+
+    # Use args.hidden_dim if explicitly set, otherwise use profile default
+    hidden_dim = args.hidden_dim if args.hidden_dim != 32 else default_hidden
+
+    # in_dim: Original FDW uses 2 for METR-LA (speed + time_of_day), 1 for others
+    # However, our data loader currently only loads speed (1 channel)
+    # TODO: Add time_of_day feature to data loader for full FDW reproduction
+    # For now, keep in_dim=1 to match current data pipeline
+    in_dim = 1
+
     model_config = {
         'num_nodes': num_nodes,
         'seq_in_len': args.seq_in,
         'seq_out_len': args.seq_out,
         'pred_len': args.seq_out,
         'seq_len': args.seq_in,
-        'in_dim': 1,
-        'input_dim': 1,
-        'hidden_dim': args.hidden_dim,
+        'in_dim': in_dim,
+        'input_dim': in_dim,
+        'hidden_dim': hidden_dim,
         'device': device,
         'adj_mx': adj_mx,
+        'gpu_profile': gpu_profile,  # Pass to model wrappers
         # Model-specific configs
-        'd_model': args.hidden_dim,
+        'd_model': hidden_dim,
         'n_head': 4,
         'd_k': 32,
         'd_v': 32,
-        'd_inner': args.hidden_dim * 2,
+        'd_inner': hidden_dim * 2,
         'dropout': args.dropout,
         'n_layers': 2,
         'layers': 2,
@@ -535,6 +564,11 @@ def parse_args():
     # Debug
     parser.add_argument('--debug', action='store_true',
                         help='Debug mode (small dataset, fast iteration)')
+
+    # GPU Profile (determines model size)
+    parser.add_argument('--gpu_profile', type=str, default='4090',
+                        choices=['1080ti', '4090', 'a100'],
+                        help='GPU profile: 1080ti (11GB, reduced), 4090 (24GB, full), a100 (40GB+, full)')
 
     args = parser.parse_args()
 

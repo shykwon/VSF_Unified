@@ -39,10 +39,15 @@ class BaseTrainer:
         self.model.load_state_dict(torch.load(path))
 
 class UnifiedTrainer(BaseTrainer):
+    def __init__(self, model, optimizer, config):
+        super().__init__(model, optimizer, config)
+        # Gradient clipping (original FDW uses clip=5.0)
+        self.clip_grad = config.get('clip_grad', 5.0)
+
     def train_epoch(self, loader):
         self.model.train()
         total_loss = 0
-        
+
         for batch in loader:
             # Move batch to device
             for k, v in batch.items():
@@ -76,6 +81,11 @@ class UnifiedTrainer(BaseTrainer):
                     loss = self.loss_fn(pred, true)
             
             loss.backward()
+
+            # Gradient clipping (prevents exploding gradients)
+            if self.clip_grad is not None and self.clip_grad > 0:
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_grad)
+
             self.optimizer.step()
             
             total_loss += loss.item()

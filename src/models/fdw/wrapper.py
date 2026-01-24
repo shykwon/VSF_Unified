@@ -38,9 +38,14 @@ class FDWWrapper(BaseVSFModel):
             adj_identity_train_test=config.get('adj_identity_train_test', False)
         )
         
-        # Default parameters from FDW paper/code if not in config
+        # Original paper default parameters (train_multi_step.py)
+        # Note: FDW paper uses these values for all GPU configs
+        # The model is relatively lightweight and doesn't need reduction
         gcn_true = config.get('gcn_true', True)
-        buildA_true = config.get('buildA_true', True)
+        # If predefined adjacency is provided, don't learn new one (use predefined)
+        # buildA_true=True means learn adjacency, =False means use predefined_A
+        has_predefined_A = config.get('adj_mx') is not None or config.get('predefined_A') is not None
+        buildA_true = config.get('buildA_true', not has_predefined_A)  # Default: False if adj provided
         gcn_depth = config.get('gcn_depth', 2)
         num_nodes = config.get('num_nodes', 207)
         dropout = config.get('dropout', 0.3)
@@ -48,11 +53,13 @@ class FDWWrapper(BaseVSFModel):
         subgraph_size = min(config.get('subgraph_size', 20), num_nodes)
         node_dim = config.get('node_dim', 40)
         dilation_exponential = config.get('dilation_exponential', 1)
+        # Original paper defaults (train_multi_step.py)
         conv_channels = config.get('conv_channels', 32)
         residual_channels = config.get('residual_channels', 32)
         skip_channels = config.get('skip_channels', 64)
         end_channels = config.get('end_channels', 128)
         seq_length = config.get('seq_in_len', 12)
+        # in_dim: METR-LA uses 2 (speed + time_of_day), others use 1
         in_dim = config.get('in_dim', 1)
         out_dim = config.get('seq_out_len', 12)
         layers = config.get('layers', 3)
@@ -60,7 +67,29 @@ class FDWWrapper(BaseVSFModel):
         tanhalpha = config.get('tanhalpha', 3)
         
         # Predefined Adjacency Matrix (needed for gtnet)
+        # Check both 'predefined_A' and 'adj_mx' keys for compatibility
         predefined_A = config.get('predefined_A', None)
+        if predefined_A is None:
+            predefined_A = config.get('adj_mx', None)
+
+        # Convert numpy array to torch tensor
+        # Original FDW (train_multi_step.py:137): predefined_A - eye(N) to remove self-loops
+        if predefined_A is not None:
+            import numpy as np
+            if isinstance(predefined_A, np.ndarray):
+                adj = predefined_A.astype(np.float32)
+                # Remove self-loops (original FDW behavior)
+                adj = adj - np.eye(adj.shape[0], dtype=np.float32)
+                # Clip negative values to 0 (in case original had no self-loops)
+                adj = np.clip(adj, 0, None)
+                predefined_A = torch.from_numpy(adj).to(self.device)
+            elif isinstance(predefined_A, torch.Tensor):
+                # Remove self-loops
+                predefined_A = predefined_A.float() - torch.eye(predefined_A.shape[0])
+                predefined_A = torch.clamp(predefined_A, min=0).to(self.device)
+            print(f"FDW: Using predefined adjacency matrix, shape={predefined_A.shape}")
+        else:
+            print(f"FDW: No adjacency matrix provided, using learned graph")
 
         self.model = gtnet(
             gcn_true=gcn_true, 

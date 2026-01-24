@@ -1,0 +1,107 @@
+# RTX 4090 (24GB VRAM) Configuration
+# Full paper settings - restored from reduced GTX 1080 Ti settings
+
+# =============================================================================
+# Global Settings
+# =============================================================================
+gpu_profile: "4090"  # Options: "1080ti", "4090", "a100"
+device: "cuda"
+batch_size: 64       # Increased from 32
+num_workers: 8
+
+# Training settings
+epochs: 200          # Increased from 100
+patience: 30         # Increased from 15
+lr: 0.001
+weight_decay: 0.0001
+
+# Learning rate scheduler (new)
+lr_scheduler:
+  type: "ReduceLROnPlateau"
+  factor: 0.5
+  patience: 10
+  min_lr: 0.00001
+
+# =============================================================================
+# Model-specific Settings (Paper defaults)
+# =============================================================================
+
+fdw:
+  conv_channels: 64      # Paper default (was 32 for 1080 Ti)
+  residual_channels: 64  # Paper default (was 32)
+  skip_channels: 128     # Paper default (was 64)
+  end_channels: 256      # Paper default (was 128)
+  layers: 5              # Paper default (was 3)
+  gcn_depth: 2
+  dropout: 0.3
+  batch_size: 64
+
+ginar:
+  hidden_dim: 64         # Paper default (was 32)
+  num_layers: 4          # Paper default (was 3)
+  dropout: 0.1
+  batch_size: 64
+
+csdi:
+  model:
+    timeemb: 128
+    featureemb: 16
+    is_unconditional: false
+    target_strategy: "random"
+  diffusion:
+    layers: 4
+    channels: 64
+    nheads: 8
+    diffusion_embedding_dim: 128
+    beta_start: 0.0001
+    beta_end: 0.5
+    num_steps: 50
+    schedule: "quad"
+  batch_size: 16         # Increased from 8
+
+srdi:
+  model:
+    timeemb: 128         # Paper default (was 64 for 1080 Ti)
+    featureemb: 16       # Paper default (was 8)
+    is_unconditional: false
+    target_strategy: "random"
+  diffusion:
+    layers: 4            # Paper default (was 2)
+    channels: 64         # Paper default (was 32)
+    nheads: 8            # Paper default (was 4)
+    diffusion_embedding_dim: 128  # Paper default (was 64)
+    beta_start: 0.0001
+    beta_end: 0.5
+    num_steps: 50
+    schedule: "quad"
+  batch_size: 16         # Increased from 8
+
+saits:
+  n_layers: 4            # Paper default
+  d_model: 256           # Paper default
+  d_ffn: 512             # Paper default
+  n_heads: 8             # Paper default
+  dropout: 0.1
+  batch_size: 64
+
+gimcc:
+  hidden_dim: 64         # Paper default
+  num_layers: 3
+  dropout: 0.1
+  batch_size: 32         # Increased from 16
+
+# =============================================================================
+# Dataset Settings
+# =============================================================================
+datasets:
+  metr-la:
+    num_nodes: 207
+    seq_in_len: 12
+    seq_out_len: 12
+    in_dim: 1
+
+  pems-bay:
+    num_nodes: 325
+    seq_in_len: 12
+    seq_out_len: 12
+    in_dim: 1

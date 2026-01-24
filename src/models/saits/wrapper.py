@@ -25,7 +25,8 @@ class SAITSWrapper(BaseVSFModel):
         self.device = config.get('device', 'cpu')
         
         # Args mapping
-        d_time = config.get('seq_len', 100)
+        # d_time = input sequence length (check all possible config keys)
+        d_time = config.get('seq_in_len', config.get('seq_len', config.get('window_size', 12)))
         d_feature = config.get('num_nodes', 207)
         d_model = config.get('d_model', 256)
         d_inner = config.get('d_inner', 512)
@@ -34,7 +35,7 @@ class SAITSWrapper(BaseVSFModel):
         d_v = config.get('d_v', 64)
         dropout = config.get('dropout', 0.1)
         n_groups = config.get('n_groups', 2)
-        n_group_inner_layers = config.get('n_group_inner_layers', 2)
+        n_group_inner_layers = config.get('n_group_inner_layers', 1)  # Original: all configs use 1
         
         # MIT=False to avoid requiring X_holdout during training
         # Set MIT=True only when you have proper holdout data for imputation evaluation
