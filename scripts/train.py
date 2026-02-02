@@ -245,7 +245,7 @@ def load_adj_matrix(dataset_name, data_dir):
 # ============================================================================
 # Data Loading
 # ============================================================================
-def create_dataloaders(args):
+def create_dataloaders(args, seed=None):
     """Create train/val/test dataloaders."""
     print(f"\n{'='*60}")
     print(f"Loading dataset: {args.dataset}")
@@ -265,7 +265,10 @@ def create_dataloaders(args):
         mode='all',
         train_ratio=args.train_ratio,
         val_ratio=args.val_ratio,
-        limit_samples=limit_samples
+        limit_samples=limit_samples,
+        missing_rate=args.missing_rate,
+        missing_pattern=args.missing_pattern,
+        missing_seed=seed if seed is not None else args.seed  # Use current seed for reproducibility
     )
 
     print(f"Train samples: {len(train_dataset)}")
@@ -327,7 +330,7 @@ def train_single_experiment(args, seed):
     print(f"{'='*60}")
 
     # Load data
-    train_loader, val_loader, test_loader, scaler, num_nodes = create_dataloaders(args)
+    train_loader, val_loader, test_loader, scaler, num_nodes = create_dataloaders(args, seed=seed)
 
     # Load adjacency matrix (for graph models)
     adj_mx = load_adj_matrix(args.dataset, args.data_dir)
@@ -474,11 +477,12 @@ def train_single_experiment(args, seed):
     test_metrics = trainer.evaluate(test_loader)
 
     print(f"\n>>> Test Results:")
-    print(f"    MAE:         {test_metrics['MAE']:.4f}")
-    print(f"    RMSE:        {test_metrics['RMSE']:.4f}")
-    print(f"    MAPE:        {test_metrics['MAPE']:.2f}%")
-    print(f"    MaskedMAE:   {test_metrics['MaskedMAE']:.4f}")
-    print(f"    MaskedRMSE:  {test_metrics['MaskedRMSE']:.4f}")
+    print(f"    MAE (Full):      {test_metrics['MAE']:.4f}")
+    print(f"    RMSE (Full):     {test_metrics['RMSE']:.4f}")
+    print(f"    ObservedMAE:     {test_metrics['ObservedMAE']:.4f}")
+    print(f"    ObservedRMSE:    {test_metrics['ObservedRMSE']:.4f}")
+    print(f"    ObservedMAPE:    {test_metrics['ObservedMAPE']:.2f}%")
+    print(f"    ObservedRatio:   {test_metrics['ObservedRatio']:.2%}")
 
     # Save results
     logger.save_results(test_metrics, train_time)
@@ -570,6 +574,13 @@ def parse_args():
                         choices=['1080ti', '4090', 'a100'],
                         help='GPU profile: 1080ti (11GB, reduced), 4090 (24GB, full), a100 (40GB+, full)')
 
+    # Missing rate for VSF experiments
+    parser.add_argument('--missing_rate', type=float, default=0.0,
+                        help='Missing rate (0.0=Oracle, 0.25/0.5/0.75/0.9 for experiments)')
+    parser.add_argument('--missing_pattern', type=str, default='sensor',
+                        choices=['sensor', 'random'],
+                        help='Missing pattern: sensor (node-wise), random (element-wise)')
+
     args = parser.parse_args()
 
     # Load YAML config if provided
@@ -643,11 +654,13 @@ def main():
 
         mae_scores = [r['metrics']['MAE'] for r in all_results]
         rmse_scores = [r['metrics']['RMSE'] for r in all_results]
-        mape_scores = [r['metrics']['MAPE'] for r in all_results]
+        obs_mae_scores = [r['metrics']['ObservedMAE'] for r in all_results]
+        obs_rmse_scores = [r['metrics']['ObservedRMSE'] for r in all_results]
 
-        print(f"  MAE:  {np.mean(mae_scores):.4f} +/- {np.std(mae_scores):.4f}")
-        print(f"  RMSE: {np.mean(rmse_scores):.4f} +/- {np.std(rmse_scores):.4f}")
-        print(f"  MAPE: {np.mean(mape_scores):.2f}% +/- {np.std(mape_scores):.2f}%")
+        print(f"  MAE (Full):    {np.mean(mae_scores):.4f} +/- {np.std(mae_scores):.4f}")
+        print(f"  RMSE (Full):   {np.mean(rmse_scores):.4f} +/- {np.std(rmse_scores):.4f}")
+        print(f"  ObservedMAE:   {np.mean(obs_mae_scores):.4f} +/- {np.std(obs_mae_scores):.4f}")
+        print(f"  ObservedRMSE:  {np.mean(obs_rmse_scores):.4f} +/- {np.std(obs_rmse_scores):.4f}")
 
         # Save summary
         summary_path = Path(args.log_dir) / f"{args.model}_{args.dataset}_summary.json"
@@ -662,8 +675,10 @@ def main():
                 'MAE_std': float(np.std(mae_scores)),
                 'RMSE_mean': float(np.mean(rmse_scores)),
                 'RMSE_std': float(np.std(rmse_scores)),
-                'MAPE_mean': float(np.mean(mape_scores)),
-                'MAPE_std': float(np.std(mape_scores))
+                'ObservedMAE_mean': float(np.mean(obs_mae_scores)),
+                'ObservedMAE_std': float(np.std(obs_mae_scores)),
+                'ObservedRMSE_mean': float(np.mean(obs_rmse_scores)),
+                'ObservedRMSE_std': float(np.std(obs_rmse_scores))
             }
         }
         with open(summary_path, 'w') as f:

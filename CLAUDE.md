@@ -22,9 +22,8 @@ python scripts/download_datasets.py
 # 3. 테스트 실행 (debug 모드)
 python scripts/train.py --model fdw --dataset metr-la --debug
 
-# 4. 전체 실험 (3 GPU 병렬)
-python scripts/run_parallel.py --dry-run  # 명령어 확인
-python scripts/run_parallel.py            # 실제 실행
+# 4. 전체 실험 (단일 GPU 순차 실행)
+python scripts/train.py --model fdw --dataset metr-la --config configs/gpu_a100_mig.yaml
 ```
 
 ## Commands
@@ -43,9 +42,9 @@ python scripts/train.py --config configs/default.yaml
 python scripts/train.py --model fdw --dataset metr-la --tensorboard
 tensorboard --logdir logs/
 
-# 병렬 실행 (3 GPU)
-python scripts/run_parallel.py                    # Interactive
-./scripts/run_nohup.sh                            # Background (SSH 끊어도 실행)
+# 순차 실행 (단일 GPU)
+python scripts/train.py --model fdw --dataset metr-la --config configs/gpu_a100_mig.yaml
+# Background 실행: nohup python scripts/train.py ... &
 
 # Wrapper 테스트
 python tests/test_wrappers.py
@@ -153,12 +152,14 @@ config = {
 }
 ```
 
-## GPU Allocation (GTX 1080 x3)
+## GPU Allocation (A100 MIG 20GB x1)
 
 ```
-GPU 0: FDW + GinAR     (batch_size=32, 가벼운 모델)
-GPU 1: CSDI           (batch_size=8, Diffusion)
-GPU 2: SRDI + SAITS   (batch_size=8~16)
+단일 GPU: 순차 실행
+- FDW, GinAR: batch_size=64 (가벼운 모델)
+- CSDI: batch_size=12 (Diffusion)
+- SRDI: batch_size=8 (가장 무거움)
+- SAITS, GIMCC: batch_size=32
 ```
 
 ## Experiment Output
@@ -173,6 +174,24 @@ logs/
     └── tensorboard/      # TensorBoard 로그
 ```
 
+## Experiment Design
+
+실험 설계 문서: **[docs/EXPERIMENT_DESIGN.md](docs/EXPERIMENT_DESIGN.md)**
+
+| 실험 | 목적 | Runs |
+|------|------|------|
+| 1. 재현성 + Oracle | Baseline + Upper Bound 확립 | 240 |
+| 2. Imputation Ablation | Mean 대체 시 성능 비교 | 24 |
+| 3. Semantic Ambiguity | Zero → Learnable token | 36 |
+| 4. Missing Rate Robustness | 25/50/75/90% Sensor failure | 120 |
+| 5. Computational Cost | 시간/메모리/파라미터 | 자동 |
+
+**총 420 runs** | 모델: FDW, GinAR, CSDI, SRDI, GIMCC (SAITS 제외)
+
+> SAITS는 imputation 전용 모델로 forecasting 미지원하여 실험에서 제외
+
+---
+
 ## Current Status
 
 ### ✅ 완료
@@ -180,11 +199,19 @@ logs/
 - 통합 Trainer (UnifiedTrainer)
 - 통합 데이터 파이프라인
 - Seed 관리 (재현성)
-- 병렬 실행 스크립트
 - TensorBoard 로깅
+- 실험 설계 문서화
 
 ### ⚠️ 미완료
-- VSF 시나리오별 마스킹 전략
+- Learnable token 구현 (GIMCC, GinAR) - 실험 3용
+- Mean imputation 모드 - 실험 2용
+- Cost logging - 실험 5용
+
+### ✅ 최근 완료
+- MAPE metric (`Metrics.MAPE`, `MaskedMetrics.MaskedMAPE`)
+- Multi-horizon 지원 (`--seq_out 3/6/12/24`)
+- Oracle mode (`--missing_rate 0`)
+- Sensor failure 마스킹 (`--missing_rate 0.25/0.5/0.75/0.9 --missing_pattern sensor`)
 
 ## Important Notes
 
@@ -192,7 +219,7 @@ logs/
 
 2. **Loss Function**: FDW/GinAR 원논문은 `masked_mae` 사용 (기본값으로 설정됨)
 
-3. **Diffusion Models**: CSDI/SRDI는 batch_size를 8로 낮춰야 8GB GPU에서 동작
+3. **Diffusion Models**: A100 MIG 20GB에서 CSDI는 batch_size=12, SRDI는 batch_size=8 권장
 
 4. **External Code**: `external/` 디렉토리는 원본 코드이므로 수정 금지, wrapper로만 사용
 
@@ -200,26 +227,22 @@ logs/
 
 ## GPU Profile System
 
-모델 설정은 GPU 메모리에 따라 자동 조정됩니다:
+현재 서버: **A100 MIG 20GB** (단일 GPU)
 
 ```bash
-# RTX 4090 (24GB) - 논문 기본 설정 (기본값)
-python scripts/train.py --model fdw --gpu_profile 4090
-
-# GTX 1080 Ti (11GB) - 축소 설정
-python scripts/train.py --model fdw --gpu_profile 1080ti
-
-# A100 (40GB+) - 논문 기본 설정
+# 현재 환경 (A100 MIG 20GB) - 기본값
 python scripts/train.py --model fdw --gpu_profile a100
+
+# 설정 파일 사용
+python scripts/train.py --config configs/gpu_a100_mig.yaml --model fdw
 ```
 
 | GPU Profile | hidden_dim | conv_channels | layers | batch_size |
 |-------------|------------|---------------|--------|------------|
 | 1080ti | 32 | 32 | 3 | 8-32 |
-| 4090 | 64 | 64 | 5 | 16-64 |
-| a100 | 64 | 64 | 5 | 32-128 |
+| a100 (MIG 20GB) | 64 | 64 | 5 | 8-64 |
 
-새 서버로 이전 시: `./scripts/migrate_to_4090.sh` 실행
+설정 파일: `configs/gpu_a100_mig.yaml`
 
 ---
 

@@ -4,14 +4,58 @@ import pandas as pd
 import os
 from src.core.dataset import BaseVSFDataset
 
-def load_dataset(name, data_dir, window_size=12, horizon=12, stride=1, mode='train', train_ratio=0.7, val_ratio=0.1, limit_samples=None, scaler=None):
+
+def generate_missing_mask(num_nodes, num_timesteps, missing_rate, pattern='sensor', seed=None):
+    """
+    Generate missing mask for VSF experiments.
+
+    Args:
+        num_nodes: Number of nodes/sensors
+        num_timesteps: Number of timesteps
+        missing_rate: Fraction of nodes to mask (0.0 = Oracle, 1.0 = all missing)
+        pattern: 'sensor' (node-wise, Sensor Failure) or 'random' (element-wise)
+        seed: Random seed for reproducibility
+
+    Returns:
+        mask: (num_timesteps, num_nodes, 1) tensor, 1=observed, 0=missing
+    """
+    if seed is not None:
+        np.random.seed(seed)
+
+    if missing_rate <= 0:
+        # Oracle: all observed
+        return np.ones((num_timesteps, num_nodes, 1), dtype=np.float32)
+
+    if pattern == 'sensor':
+        # Sensor Failure: entire nodes are missing across all timesteps
+        num_missing_nodes = int(num_nodes * missing_rate)
+        missing_nodes = np.random.choice(num_nodes, num_missing_nodes, replace=False)
+
+        mask = np.ones((num_timesteps, num_nodes, 1), dtype=np.float32)
+        mask[:, missing_nodes, :] = 0.0
+
+    elif pattern == 'random':
+        # Random: element-wise missing
+        mask = np.random.rand(num_timesteps, num_nodes, 1) > missing_rate
+        mask = mask.astype(np.float32)
+    else:
+        raise ValueError(f"Unknown pattern: {pattern}")
+
+    return mask
+
+def load_dataset(name, data_dir, window_size=12, horizon=12, stride=1, mode='train',
+                 train_ratio=0.7, val_ratio=0.1, limit_samples=None, scaler=None,
+                 missing_rate=0.0, missing_pattern='sensor', missing_seed=None):
     """
     Factory function to load real-world datasets.
     Args:
         name: 'METR-LA', 'PEMS-BAY', 'SOLAR', 'TRAFFIC', 'ELECTRICITY'
         data_dir: Path to data/raw or similar
         limit_samples: If set, limit total data used to this number (for debugging)
-        scaler: Optional StandardScaler instance. If valid/test mode, pas current fitted scaler.
+        scaler: Optional StandardScaler instance. If valid/test mode, pass current fitted scaler.
+        missing_rate: Fraction of nodes to mask (0.0=Oracle, applied to test only)
+        missing_pattern: 'sensor' (node-wise) or 'random' (element-wise)
+        missing_seed: Random seed for mask generation (for reproducibility)
     """
     name = name.upper()
     
@@ -65,11 +109,29 @@ def load_dataset(name, data_dir, window_size=12, horizon=12, stride=1, mode='tra
     elif mode == 'all':
         # Apply transform to whole data, then split
         data = scaler.transform(data)
-        
+
+        num_nodes = data.shape[1]
+
+        # Train/Val: no missing (Oracle)
         train_dataset = WindowedVSFDataset(data[:train_end], window_size, horizon, stride, mode='train')
         val_dataset = WindowedVSFDataset(data[train_end:val_end], window_size, horizon, stride, mode='val')
-        test_dataset = WindowedVSFDataset(data[val_end:], window_size, horizon, stride, mode='test')
-        
+
+        # Test: apply missing mask if missing_rate > 0
+        test_data = data[val_end:]
+        if missing_rate > 0:
+            test_mask = generate_missing_mask(
+                num_nodes=num_nodes,
+                num_timesteps=test_data.shape[0],
+                missing_rate=missing_rate,
+                pattern=missing_pattern,
+                seed=missing_seed
+            )
+            test_dataset = WindowedVSFDataset(test_data, window_size, horizon, stride, mask=test_mask, mode='test')
+            print(f"Applied missing mask: rate={missing_rate}, pattern={missing_pattern}, "
+                  f"missing_nodes={int(num_nodes * missing_rate)}/{num_nodes}")
+        else:
+            test_dataset = WindowedVSFDataset(test_data, window_size, horizon, stride, mode='test')
+
         return train_dataset, val_dataset, test_dataset, scaler
     else:
         data_slice = data
@@ -153,24 +215,24 @@ class WindowedVSFDataset(BaseVSFDataset):
     def __getitem__(self, idx):
         start = idx * self.stride
         end = start + self.window_size
-        
-        # x: Input window
-        x = self.data[start:end] # (T_in, N, C)
+
+        # x: Input window (apply mask - zero filling for missing values)
+        x = self.data[start:end].clone()  # (T_in, N, C)
         x_mask = self.mask[start:end]
-        
-        # y: Target window (horizon)
+        x = x * x_mask  # Zero filling: missing positions become 0
+
+        # y: Target window (horizon) - keep original values for evaluation
         y_start = end
         y_end = end + self.horizon
-        y = self.data[y_start:y_end] # (T_out, N, C)
+        y = self.data[y_start:y_end]  # (T_out, N, C)
         y_mask = self.mask[y_start:y_end]
-        
-        # In VSF, we might need a unified "mask" for input
+
         # Return dict matching core/dataset
         return {
-            'x': x,
-            'y': y,
-            'mask': x_mask, # Mask for input
-            # 'y_mask': y_mask # Optional
+            'x': x,           # Input with zero-filled missing values
+            'y': y,           # Target (ground truth, unmasked for evaluation)
+            'mask': x_mask,   # Mask for input (1=observed, 0=missing)
+            'y_mask': y_mask  # Mask for target
         }
 
 class SyntheticVSFDataset(WindowedVSFDataset):

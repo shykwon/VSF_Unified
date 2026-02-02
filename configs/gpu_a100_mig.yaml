@@ -1,12 +1,12 @@
-# RTX 4090 (24GB VRAM) Configuration
-# Full paper settings - restored from reduced GTX 1080 Ti settings
+# A100 MIG 20GB Configuration
+# Adjusted from 4090 (24GB) settings for MIG partition (~20GB available)
 
 # =============================================================================
 # Global Settings
 # =============================================================================
-gpu_profile: "4090"  # Options: "1080ti", "4090", "a100"
+gpu_profile: "a100"  # Options: "1080ti", "4090", "a100"
 device: "cuda"
-batch_size: 64       # Increased from 32
+batch_size: 256      # Increased to maximize GPU utilization
 num_workers: 8
 
 # Training settings
@@ -34,13 +34,13 @@ fdw:
   layers: 5              # Paper default (was 3)
   gcn_depth: 2
   dropout: 0.3
-  batch_size: 64
+  batch_size: 256        # Increased for GPU utilization
 
 ginar:
   hidden_dim: 64         # Paper default (was 32)
   num_layers: 4          # Paper default (was 3)
   dropout: 0.1
-  batch_size: 64
+  batch_size: 256        # Increased for GPU utilization
 
 csdi:
   model:
@@ -57,24 +57,24 @@ csdi:
     beta_end: 0.5
     num_steps: 50
     schedule: "quad"
-  batch_size: 16         # Increased from 8
+  batch_size: 32         # Increased from 16
 
 srdi:
   model:
-    timeemb: 128         # Paper default (was 64 for 1080 Ti)
-    featureemb: 16       # Paper default (was 8)
+    timeemb: 128         # Paper default
+    featureemb: 16       # Paper default
     is_unconditional: false
     target_strategy: "random"
   diffusion:
-    layers: 4            # Paper default (was 2)
-    channels: 64         # Paper default (was 32)
-    nheads: 8            # Paper default (was 4)
-    diffusion_embedding_dim: 128  # Paper default (was 64)
+    layers: 4            # Paper default
+    channels: 64         # Paper default
+    nheads: 8            # Paper default
+    diffusion_embedding_dim: 128  # Paper default
     beta_start: 0.0001
     beta_end: 0.5
     num_steps: 50
     schedule: "quad"
-  batch_size: 16         # Increased from 8
+  batch_size: 32         # Increased from 16
 
 saits:
   n_layers: 4            # Paper default
@@ -82,13 +82,13 @@ saits:
   d_ffn: 512             # Paper default
   n_heads: 8             # Paper default
   dropout: 0.1
-  batch_size: 64
+  batch_size: 128        # Increased for GPU utilization
 
 gimcc:
   hidden_dim: 64         # Paper default
   num_layers: 3
   dropout: 0.1
-  batch_size: 32         # Increased from 16
+  batch_size: 128        # Increased for GPU utilization
 
 # =============================================================================
 # Dataset Settings
