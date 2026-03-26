@@ -184,8 +184,8 @@ class ResidualBlock(nn.Module):
         y = y.reshape(channel*B, K ,L)
         y = y.transpose(1, 2)
         invariant,variant,loss_d = self.dispatcher(y)
-        print("invariant----",invariant.shape)
-        print("variant----",invariant.shape)
+        # print("invariant----",invariant.shape)  # Debug output disabled
+        # print("variant----",invariant.shape)
         invariant = invariant.transpose(1, 2)
         invariant = invariant.unsqueeze(dim = 0)
         variant = variant.transpose(1, 2)

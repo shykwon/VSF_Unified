@@ -45,7 +45,8 @@ def generate_missing_mask(num_nodes, num_timesteps, missing_rate, pattern='senso
 
 def load_dataset(name, data_dir, window_size=12, horizon=12, stride=1, mode='train',
                  train_ratio=0.7, val_ratio=0.1, limit_samples=None, scaler=None,
-                 missing_rate=0.0, missing_pattern='sensor', missing_seed=None):
+                 missing_rate=0.0, missing_pattern='sensor', missing_seed=None,
+                 train_missing_rate=0.0):
     """
     Factory function to load real-world datasets.
     Args:
@@ -77,6 +78,11 @@ def load_dataset(name, data_dir, window_size=12, horizon=12, stride=1, mode='tra
     elif name == 'ELECTRICITY':
         path = os.path.join(data_dir, 'electricity.txt')
         data = np.loadtxt(path, delimiter=',')
+    elif name == 'WEATHER':
+        path = os.path.join(data_dir, 'weather.csv')
+        df = pd.read_csv(path)
+        df = df.drop(columns=['date'])  # Remove date column, keep 21 features
+        data = df.values.astype(np.float32)
     else:
         raise ValueError(f"Unknown dataset: {name}")
 
@@ -112,8 +118,22 @@ def load_dataset(name, data_dir, window_size=12, horizon=12, stride=1, mode='tra
 
         num_nodes = data.shape[1]
 
-        # Train/Val: no missing (Oracle)
-        train_dataset = WindowedVSFDataset(data[:train_end], window_size, horizon, stride, mode='train')
+        # Train: apply fixed missing mask if train_missing_rate > 0
+        train_data = data[:train_end]
+        if train_missing_rate > 0:
+            train_mask = generate_missing_mask(
+                num_nodes=num_nodes,
+                num_timesteps=train_data.shape[0],
+                missing_rate=train_missing_rate,
+                pattern=missing_pattern,
+                seed=missing_seed
+            )
+            train_dataset = WindowedVSFDataset(train_data, window_size, horizon, stride, mask=train_mask, mode='train')
+            print(f"Fixed train-time missing: rate={train_missing_rate}, pattern={missing_pattern}, "
+                  f"missing_nodes={int(num_nodes * train_missing_rate)}/{num_nodes}")
+        else:
+            train_dataset = WindowedVSFDataset(train_data, window_size, horizon, stride, mode='train')
+        # Val: always Oracle
         val_dataset = WindowedVSFDataset(data[train_end:val_end], window_size, horizon, stride, mode='val')
 
         # Test: apply missing mask if missing_rate > 0

@@ -268,7 +268,8 @@ def create_dataloaders(args, seed=None):
         limit_samples=limit_samples,
         missing_rate=args.missing_rate,
         missing_pattern=args.missing_pattern,
-        missing_seed=seed if seed is not None else args.seed  # Use current seed for reproducibility
+        missing_seed=seed if seed is not None else args.seed,  # Use current seed for reproducibility
+        train_missing_rate=args.train_missing_rate,
     )
 
     print(f"Train samples: {len(train_dataset)}")
@@ -505,7 +506,7 @@ def parse_args():
                         choices=['fdw', 'ginar', 'csdi', 'srdi', 'saits', 'gimcc'],
                         help='Model to train')
     parser.add_argument('--dataset', type=str, default='metr-la',
-                        choices=['metr-la', 'pems-bay', 'solar', 'traffic', 'electricity'],
+                        choices=['metr-la', 'pems-bay', 'solar', 'traffic', 'electricity', 'weather'],
                         help='Dataset to use')
     parser.add_argument('--data_dir', type=str, default='data/raw',
                         help='Data directory')
@@ -577,6 +578,8 @@ def parse_args():
     # Missing rate for VSF experiments
     parser.add_argument('--missing_rate', type=float, default=0.0,
                         help='Missing rate (0.0=Oracle, 0.25/0.5/0.75/0.9 for experiments)')
+    parser.add_argument('--train_missing_rate', type=float, default=0.0,
+                        help='Fixed missing rate during training (0.0=Oracle, for Experiment A)')
     parser.add_argument('--missing_pattern', type=str, default='sensor',
                         choices=['sensor', 'random'],
                         help='Missing pattern: sensor (node-wise), random (element-wise)')
